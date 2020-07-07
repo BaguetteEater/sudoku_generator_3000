@@ -2,8 +2,9 @@ from lib.gopherpysat import Gophersat
 from typing import Dict, Tuple, List, Union
 import itertools
 import random
-import time
 import sys
+import copy
+import os
 
 gophersat_exec = "./lib/gophersat-1.1.6"
 
@@ -156,6 +157,10 @@ def insert_values_in_sudoku(gs:Gophersat, coord_list:List, sudoku:List[List]) ->
 
 	return False # If there no more number to test, it means that we got stuck and we backtrack by returning False
 
+# Ask for the possibility for a number to be at the position (i, j)
+# Returns False if adding the number to the sudoku grid breaks the model and gives a non solvable solution
+# Returns True otherwise
+# Calling this function will add a clause to the Gophersat resolver but it is automaticly removed if it breaks the model
 def is_number_possible(gs:Gophersat, number_to_insert:int, i:int, j:int) :
 	gs.push_pretty_clause([f"{number_to_insert}_{i}_{j}"])
 	solvable = gs.solve()
@@ -165,11 +170,20 @@ def is_number_possible(gs:Gophersat, number_to_insert:int, i:int, j:int) :
 
 	return solvable
 
-def generate_unique_sudoku(difficulty:int, sudoku:List, gs:Gophersat) :
+# It hides random cases one by one
+# At each case which has not been hidden already, we check if removing it adds solution to the puzzle
+# If there is more than one solution at the end, it return a empty grid
+# Else it returns the hidden sudoku
+#
+# TODO : 
+# 	- Find a solution with acktracking to avoid returning a empty grid
+# 	- Take in consideration the difficulty parameter
+
+def hide_case_sudoku(difficulty:int, sudoku:List, gs:Gophersat) :
 
 	cpt = 0
 	already_visited = []
-	hidden_sudoku = sudoku.copy()
+	hidden_sudoku = copy.deepcopy(sudoku)
 
 	while cpt < 15 :
 		
@@ -193,23 +207,53 @@ def generate_unique_sudoku(difficulty:int, sudoku:List, gs:Gophersat) :
 def is_there_one_model(gs:Gophersat) :
 	return gs.count_model() == 1
 
-if __name__ == "__main__" : 
+# Generates th vocabulary and initilize the Gophersat with it
+# It insert the rules to apply when generating a sudoku
+# Uses the Gophersat to generates one full sudoku
+# Then it hides cases with the assurance that there is one and only solution
+# Returns a Tuple containing the solution and the playable sudoku
+def generate_sudoku() -> Tuple[List, List]:
 
 	voc = generate_voca()
-
 	gs = Gophersat(gophersat_exec, voc)
 
 	insert_rules(gs, voc)
 
-	sudoku = generate_random_sudoku(gs)
-	for row in sudoku :
-		print(row)
+	soluce = generate_random_sudoku(gs)
+	hidden_sudoku = hide_case_sudoku(0, soluce, gs)
 
-	gs.solve()
-	gs.count_model()
+	return (soluce, hidden_sudoku)
 
-	print("=================")
+# Creates a text file containing the given sudoku
+# Returns False if the operation fail
+# Returns True if the operation is a success
+def print_sudoku(file_name:str, sudoku:List[List]) -> bool :
 
-	hidden_sudoku = generate_unique_sudoku(0, sudoku, gs)
-	for row in hidden_sudoku :
-		print(row)
+	try :
+		
+		directory = os.getcwd()	
+		f = open(directory + f"/{file_name}", "w")
+
+		for row in sudoku :
+			for element in row :
+				f.write(str(element) + " ")
+			
+			f.write("\n")
+
+	except Exception as err :
+		print(f"An exception occured during the creation of {file_name} :\n{err}")
+	else :
+		f.close()
+
+
+	return True
+
+if __name__ == "__main__" : 
+	
+	(soluce, hidden_sudoku) = generate_sudoku()
+	print_sudoku("solution", soluce)
+	print_sudoku("playble_sudoku", hidden_sudoku)
+
+
+
+	
